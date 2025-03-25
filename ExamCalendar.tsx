@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -42,7 +42,8 @@ const ExamCalendar: React.FC = () => {
   const [selectedFilter, setSelectedFilter] = useState<string>("ALL");
   const [selectedExam, setSelectedExam] = useState<ExamData[] | null>(null);
 
-  const processExcelFile = async (file: File) => {
+  // Using useCallback to memoize functions
+  const processExcelFile = useCallback(async (file: File) => {
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, {
@@ -59,14 +60,14 @@ const ExamCalendar: React.FC = () => {
 
       const normalizedData = data.map((row: any) => ({
         date: new Date(row.Date),
-        examSeries: row["Exam series"],
-        board: row.Board,
+        examSeries: row["Exam series"] || "",
+        board: row.Board || "",
         qualification: row.Qual || "Unknown",
-        examCode: row["Examination code"],
-        subject: row.Subject,
-        title: row.Title,
-        time: row.Time,
-        duration: row.Duration,
+        examCode: row["Examination code"] || "",
+        subject: row.Subject || "",
+        title: row.Title || "",
+        time: row.Time || "",
+        duration: row.Duration || "",
         level: row.Level,
         unit: row.Unit,
         part: row.Part,
@@ -80,36 +81,39 @@ const ExamCalendar: React.FC = () => {
     } catch (error) {
       console.error("Error processing file:", error);
     }
-  };
+  }, []);
 
-  const handleFilterChange = (value: string) => {
+  const handleFilterChange = useCallback((value: string) => {
     setSelectedFilter(value);
     if (value === "ALL") {
       setFilteredData(examData);
     } else {
       setFilteredData(examData.filter((exam) => exam.qualification === value));
     }
-  };
+  }, [examData]);
 
-  const getDaysInMonth = (date: Date) => {
+  const getDaysInMonth = useCallback((date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  };
+  }, []);
 
-  const getFirstDayOfMonth = (date: Date) => {
+  const getFirstDayOfMonth = useCallback((date: Date) => {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-    // Convert Sunday (0) to 5, and Saturday (6) to 4
+    // Convert Sunday (0) to 6, and Saturday (6) to 5
     // Monday (1) becomes 0, Tuesday (2) becomes 1, etc.
-    return firstDay === 0 ? 4 : firstDay === 6 ? 4 : firstDay - 1;
-  };
+    return firstDay === 0 ? 6 : firstDay - 1;
+  }, []);
 
-  const getExamsForDate = (date: number) => {
+  const getExamsForDate = useCallback((date: number) => {
     return filteredData.filter(
       (exam) =>
         exam.date.getDate() === date &&
         exam.date.getMonth() === currentDate.getMonth() &&
         exam.date.getFullYear() === currentDate.getFullYear()
     );
-  };
+};
+
+export default ExamCalendar;
+  }, [filteredData, currentDate]);
 
   return (
     <div
@@ -235,11 +239,11 @@ const ExamCalendar: React.FC = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(5, 1fr)",
+            gridTemplateColumns: "repeat(7, 1fr)",
             gap: "8px",
           }}
         >
-          {["Mon", "Tue", "Wed", "Thu", "Fri"].map((day) => (
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => (
             <div
               key={day}
               style={{
@@ -265,59 +269,50 @@ const ExamCalendar: React.FC = () => {
             )
           )}
 
-          {Array.from({ length: getDaysInMonth(currentDate) })
-            .map((_, index) => {
-              const date = index + 1;
-              const dayOfWeek = new Date(
-                currentDate.getFullYear(),
-                currentDate.getMonth(),
-                date
-              ).getDay();
-              // Skip weekends (0 is Sunday, 6 is Saturday)
-              if (dayOfWeek === 0 || dayOfWeek === 6) return null;
-              const exams = getExamsForDate(date);
-              return (
-                <div
-                  key={date}
-                  onClick={() => exams.length > 0 && setSelectedExam(exams)}
-                  style={{
-                    border: `1px solid ${COLORS.mistGrey}`,
-                    minHeight: "100px",
-                    padding: "8px",
-                    cursor: exams.length > 0 ? "pointer" : "default",
-                  }}
-                >
-                  <div>{date}</div>
-                  {exams.length > 0 && (
-                    <div style={{ marginTop: "4px" }}>
-                      {Object.entries(
-                        exams.reduce((acc: Record<string, number>, exam) => {
-                          acc[exam.qualification] =
-                            (acc[exam.qualification] || 0) + 1;
-                          return acc;
-                        }, {})
-                      ).map(([qualification, count]) => (
-                        <div
-                          key={qualification}
-                          style={{
-                            color: EXAM_COLORS[qualification],
-                            fontSize: "14px",
-                            backgroundColor: `${EXAM_COLORS[qualification]}15`,
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            marginBottom: "2px",
-                            border: `1px solid ${EXAM_COLORS[qualification]}`,
-                          }}
-                        >
-                          {count} {qualification} exam{count > 1 ? "s" : ""}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-            .filter((day) => day !== null)}
+          {Array.from({ length: getDaysInMonth(currentDate) }).map((_, index) => {
+            const date = index + 1;
+            const exams = getExamsForDate(date);
+            return (
+              <div
+                key={date}
+                onClick={() => exams.length > 0 && setSelectedExam(exams)}
+                style={{
+                  border: `1px solid ${COLORS.mistGrey}`,
+                  minHeight: "100px",
+                  padding: "8px",
+                  cursor: exams.length > 0 ? "pointer" : "default",
+                }}
+              >
+                <div>{date}</div>
+                {exams.length > 0 && (
+                  <div style={{ marginTop: "4px" }}>
+                    {Object.entries(
+                      exams.reduce((acc: Record<string, number>, exam) => {
+                        acc[exam.qualification] =
+                          (acc[exam.qualification] || 0) + 1;
+                        return acc;
+                      }, {})
+                    ).map(([qualification, count]) => (
+                      <div
+                        key={qualification}
+                        style={{
+                          color: EXAM_COLORS[qualification] || COLORS.graphiteGrey,
+                          fontSize: "14px",
+                          backgroundColor: `${EXAM_COLORS[qualification] || COLORS.mistGrey}15`,
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          marginBottom: "2px",
+                          border: `1px solid ${EXAM_COLORS[qualification] || COLORS.mistGrey}`,
+                        }}
+                      >
+                        {count} {qualification} exam{count > 1 ? "s" : ""}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -339,10 +334,10 @@ const ExamCalendar: React.FC = () => {
               <div
                 key={index}
                 style={{
-                  border: `1px solid ${EXAM_COLORS[exam.qualification]}`,
+                  border: `1px solid ${EXAM_COLORS[exam.qualification] || COLORS.mistGrey}`,
                   borderRadius: "4px",
                   padding: "16px",
-                  backgroundColor: `${EXAM_COLORS[exam.qualification]}10`,
+                  backgroundColor: `${EXAM_COLORS[exam.qualification] || COLORS.mistGrey}10`,
                 }}
               >
                 <div
@@ -353,7 +348,7 @@ const ExamCalendar: React.FC = () => {
                   }}
                 >
                   <Calendar
-                    style={{ color: EXAM_COLORS[exam.qualification] }}
+                    style={{ color: EXAM_COLORS[exam.qualification] || COLORS.graphiteGrey }}
                   />
                   <h4
                     style={{
@@ -407,6 +402,3 @@ const ExamCalendar: React.FC = () => {
       )}
     </div>
   );
-};
-
-export default ExamCalendar;
